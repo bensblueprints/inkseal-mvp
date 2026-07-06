@@ -1,0 +1,15 @@
+services:
+  inkseal:
+    build: .
+    ports:
+      - "5334:5334"
+    environment:
+      - PORT=5334
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme}
+      - BASE_URL=${BASE_URL:-}
+    volumes:
+      - inkseal_data:/data
+    restart: unless-stopped
+
+volumes:
+  inkseal_data:

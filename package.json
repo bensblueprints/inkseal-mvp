@@ -1,0 +1,72 @@
+{
+  "name": "inkseal",
+  "version": "1.0.0",
+  "description": "Self-hosted e-signature platform. Unlimited signatures. Pay once, own it forever.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Ben (bensblueprints)",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "postinstall": "node scripts/setup-native.js",
+    "start": "node server/index.js",
+    "desktop": "electron .",
+    "dist": "vite build && electron-builder --win nsis",
+    "test": "node test/coords.test.js && node test/smoke.js"
+  },
+  "build": {
+    "appId": "com.bensblueprints.inkseal",
+    "productName": "Inkseal",
+    "files": [
+      "electron/**",
+      "server/**",
+      "fonts/**",
+      "dist/**",
+      "package.json",
+      "node_modules/**"
+    ],
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false
+    },
+    "directories": {
+      "output": "release"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.productivity"
+    }
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.2.0",
+    "express": "^4.21.2",
+    "multer": "^2.0.1",
+    "nodemailer": "^7.0.4",
+    "pdf-lib": "^1.17.1",
+    "@pdf-lib/fontkit": "^1.1.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.11",
+    "@vitejs/plugin-react": "^4.6.0",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8",
+    "framer-motion": "^12.19.1",
+    "lucide-react": "^0.525.0",
+    "pdfjs-dist": "^4.7.76",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-router-dom": "^7.6.3",
+    "tailwindcss": "^4.1.11",
+    "vite": "^7.0.0"
+  }
+}
