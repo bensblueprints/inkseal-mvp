@@ -15,7 +15,8 @@ fs.mkdirSync(DOCS_DIR, { recursive: true });
 // `npm install` time and restores the Node binding afterward).
 function nativeBindingPath() {
   if (!process.versions.electron) return null;
-  const p = path.join(ROOT, 'vendor', 'better_sqlite3-electron.node');
+  const p = path.join(ROOT, 'vendor', 'better_sqlite3-electron.node')
+    .replace('app.asar' + path.sep, 'app.asar.unpacked' + path.sep);
   return fs.existsSync(p) ? p : null;
 }
 
