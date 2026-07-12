@@ -53,7 +53,7 @@ docker compose up -d   # persists the SQLite db + signed PDFs in a named volume
 
 Want the packaged Windows installer with zero terminal time? Grab the one-time-purchase build:
 
-**→ [https://whop.com/onetime-suite](https://whop.com/onetime-suite)**
+**→ [https://whop.com/benjisaiempire/inkseal](https://whop.com/benjisaiempire/inkseal)**
 
 ## vs DocuSign
 
