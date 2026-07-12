@@ -27,6 +27,9 @@ export const api = {
   getSettings: () => request('/api/settings'),
   updateSettings: (data) => request('/api/settings', { method: 'PUT', body: data }),
 
+  getLicense: () => request('/api/license'),
+  activateLicense: (key) => request('/api/license/activate', { method: 'POST', body: { key } }),
+
   listEnvelopes: () => request('/api/envelopes'),
   getEnvelope: (id) => request(`/api/envelopes/${id}`),
   createEnvelope: (formData) => request('/api/envelopes', { method: 'POST', body: formData }),

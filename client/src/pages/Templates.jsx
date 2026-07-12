@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LayoutTemplate, Trash2, PlusSquare } from 'lucide-react';
 import { api } from '../api.js';
+import UpgradeModal from '../components/UpgradeModal.jsx';
 
 export default function Templates() {
   const [templates, setTemplates] = useState(null);
+  const [showUpgrade, setShowUpgrade] = useState(false);
   const nav = useNavigate();
 
   const load = () => api.listTemplates().then(setTemplates);
@@ -20,8 +22,13 @@ export default function Templates() {
       const email = prompt(`Signer email for "${name}" (optional)`, '') || '';
       signers[role] = { name, email };
     }
-    const env = await api.fromTemplate(tpl.id, { title: tpl.name, signers });
-    nav(`/admin/envelopes/${env.id}/edit`);
+    try {
+      const env = await api.fromTemplate(tpl.id, { title: tpl.name, signers });
+      nav(`/admin/envelopes/${env.id}/edit`);
+    } catch (err) {
+      if (err.status === 402) setShowUpgrade(true);
+      else alert(err.message);
+    }
   };
 
   const remove = async (id) => {
@@ -34,6 +41,8 @@ export default function Templates() {
     <div className="mx-auto max-w-4xl p-8">
       <h1 className="mb-1 text-2xl font-semibold">Templates</h1>
       <p className="mb-8 text-sm text-zinc-500">Save an envelope's field layout once, reuse it for every new deal.</p>
+
+      {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} onActivated={() => setShowUpgrade(false)} />}
 
       {templates === null ? (
         <p className="text-zinc-500">Loading…</p>

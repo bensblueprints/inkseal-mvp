@@ -18,6 +18,7 @@ import db, { DOCS_DIR, getSettings } from './db.js';
 import { sha256Hex, appendAuditEvent, verifyChain } from './hash.js';
 import { validatePdfUpload, flattenEnvelope, UploadRejected } from './pdf.js';
 import { sendSigningInvite, sendCompletionEmail, smtpConfigured } from './mailer.js';
+import { licenseStatus, activateLicense, requireEnvelopeQuota, isLicensed, noteFreeEnvelopeUsed } from './license.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 5334;
@@ -97,6 +98,15 @@ app.put('/api/settings', requireAuth, (req, res) => {
 
 app.get('/api/settings/smtp-status', requireAuth, (req, res) => res.json({ configured: smtpConfigured() }));
 
+// ---------- license (first document free, then $59 lifetime) ----------
+app.get('/api/license', requireAuth, (req, res) => res.json(licenseStatus()));
+
+app.post('/api/license/activate', requireAuth, async (req, res) => {
+  const result = await activateLicense(req.body?.key);
+  if (!result.ok) return res.status(result.status).json({ error: result.error });
+  res.json({ ok: true, ...licenseStatus() });
+});
+
 // ---------- helpers ----------
 function baseUrl(req) {
   const s = getSettings();
@@ -121,6 +131,7 @@ const FIELD_TYPES = ['signature', 'initials', 'date', 'text'];
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 26 * 1024 * 1024 } });
 
 app.post('/api/envelopes', requireAuth, upload.single('pdf'), async (req, res) => {
+  if (!requireEnvelopeQuota(res)) return;
   if (!req.file) return res.status(400).json({ error: 'a PDF file is required (field name "pdf")' });
   try {
     await validatePdfUpload(req.file.buffer);
@@ -140,6 +151,8 @@ app.post('/api/envelopes', requireAuth, upload.single('pdf'), async (req, res) =
     INSERT INTO envelopes (title, status, routing, original_pdf_path, original_sha256)
     VALUES (?, 'draft', ?, ?, ?)
   `).run(title, routing, pdfPath, sha256);
+
+  if (!isLicensed()) noteFreeEnvelopeUsed();
 
   appendAuditEvent(info.lastInsertRowid, {
     type: 'created', actor: 'admin', ip: clientIp(req), ua: req.get('user-agent') || '',
@@ -350,6 +363,7 @@ app.delete('/api/templates/:id', requireAuth, (req, res) => {
 
 // Create a fresh draft envelope from a template: same PDF, remapped signer roles -> real signers.
 app.post('/api/envelopes/from-template/:id', requireAuth, async (req, res) => {
+  if (!requireEnvelopeQuota(res)) return;
   const tpl = db.prepare('SELECT * FROM templates WHERE id = ?').get(req.params.id);
   if (!tpl) return res.status(404).json({ error: 'template not found' });
   if (!tpl.pdf_path || !fs.existsSync(tpl.pdf_path)) return res.status(400).json({ error: 'template has no stored PDF; recreate it' });
@@ -386,6 +400,8 @@ app.post('/api/envelopes/from-template/:id', requireAuth, async (req, res) => {
     `).run(info.lastInsertRowid, signerId, f.type, f.page, f.x, f.y, f.w, f.h, f.rotation || 0, f.required ? 1 : 0);
   }
 
+  if (!isLicensed()) noteFreeEnvelopeUsed();
+
   appendAuditEvent(info.lastInsertRowid, { type: 'created', actor: 'admin', ip: clientIp(req), ua: req.get('user-agent') || '', data: { from_template: tpl.id } });
   res.status(201).json(serializeEnvelope(db.prepare('SELECT * FROM envelopes WHERE id = ?').get(info.lastInsertRowid)));
 });
@@ -407,7 +423,7 @@ app.get('/api/sign/:token', (req, res) => {
 
   // record a "viewed" event once per signer, best-effort, not blocking
   if (!signer.consent_at && signer.status !== 'signed') {
-    appendAuditEvent(envelope.id, { type: 'viewed', actor: signer.name, ip: clientIp(req), ua: req.get('user-agent') || '', data: { signer_id: signer.id } });
+    appendAuditEvent(envelope.id, { type: 'viewed', actor: signer.name, ip: clientIp(req), ua: req.get('user-agent') || '', data: { signer_id: signer.id, email: signer.email } });
   }
 
   res.json({
@@ -442,7 +458,7 @@ app.post('/api/sign/:token/consent', (req, res) => {
   if (!ctx) return;
   const now = new Date().toISOString();
   db.prepare('UPDATE signers SET consent_at = ? WHERE id = ?').run(now, ctx.signer.id);
-  appendAuditEvent(ctx.envelope.id, { type: 'consented', actor: ctx.signer.name, ip: clientIp(req), ua: req.get('user-agent') || '', data: { signer_id: ctx.signer.id } });
+  appendAuditEvent(ctx.envelope.id, { type: 'consented', actor: ctx.signer.name, ip: clientIp(req), ua: req.get('user-agent') || '', data: { signer_id: ctx.signer.id, email: ctx.signer.email } });
   res.json({ ok: true, consent_at: now });
 });
 
@@ -469,7 +485,7 @@ app.post('/api/sign/:token/fields/:fieldId', (req, res) => {
     return res.status(400).json({ error: 'provide png_base64 or value_text' });
   }
 
-  appendAuditEvent(ctx.envelope.id, { type: 'field_signed', actor: ctx.signer.name, ip: clientIp(req), ua: req.get('user-agent') || '', data: { field_id: field.id, type: field.type } });
+  appendAuditEvent(ctx.envelope.id, { type: 'field_signed', actor: ctx.signer.name, ip: clientIp(req), ua: req.get('user-agent') || '', data: { field_id: field.id, type: field.type, email: ctx.signer.email } });
   res.json({ ok: true });
 });
 
@@ -485,7 +501,7 @@ app.post('/api/sign/:token/complete', async (req, res) => {
 
   const now = new Date().toISOString();
   db.prepare(`UPDATE signers SET status = 'signed', signed_at = ? WHERE id = ?`).run(now, signer.id);
-  appendAuditEvent(envelope.id, { type: 'signer_completed', actor: signer.name, ip: clientIp(req), ua: req.get('user-agent') || '', data: { signer_id: signer.id } });
+  appendAuditEvent(envelope.id, { type: 'signer_completed', actor: signer.name, ip: clientIp(req), ua: req.get('user-agent') || '', data: { signer_id: signer.id, email: signer.email } });
 
   const allSigners = db.prepare('SELECT * FROM signers WHERE envelope_id = ? ORDER BY order_index ASC, id ASC').all(envelope.id);
   const stillPending = allSigners.filter((s) => s.status !== 'signed');
@@ -541,7 +557,7 @@ app.post('/api/sign/:token/decline', (req, res) => {
   const reason = (req.body?.reason || '').slice(0, 500);
   db.prepare(`UPDATE signers SET status = 'declined', decline_reason = ? WHERE id = ?`).run(reason, signer.id);
   db.prepare(`UPDATE envelopes SET status = 'declined' WHERE id = ?`).run(envelope.id);
-  appendAuditEvent(envelope.id, { type: 'declined', actor: signer.name, ip: clientIp(req), ua: req.get('user-agent') || '', data: { signer_id: signer.id, reason } });
+  appendAuditEvent(envelope.id, { type: 'declined', actor: signer.name, ip: clientIp(req), ua: req.get('user-agent') || '', data: { signer_id: signer.id, email: signer.email, reason } });
   res.json({ ok: true });
 });
 

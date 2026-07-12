@@ -2,7 +2,8 @@
 // DB/DATA_DIR:
 //   upload -> place fields (2 sequential signers) -> sequential enforcement
 //   -> sign in order -> flatten to final PDF (embedded image XObject asserted)
-//   -> audit chain verifies -> tamper detection -> decline path -> void 410.
+//   -> audit chain verifies -> tamper detection -> license gate (first document
+//   free, second blocked 402, key activation) -> decline path -> void 410.
 //
 // Coordinate-mapping unit tests (0/90/180/270 rotation) live in
 // test/coords.test.js and are run first by `npm test`.
@@ -23,6 +24,7 @@ process.env.NODE_ENV = 'test';
 process.env.PORT = '5434';
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'inkseal-test-'));
 process.env.ADMIN_PASSWORD = 'test-password';
+delete process.env.WHOP_API_KEY; // exercise the graceful (format-only) license path
 
 const { default: app } = await import('../server/index.js');
 const server = app.listen(5434, '127.0.0.1');
@@ -292,6 +294,38 @@ await step('tampering a mid-row data_json breaks verification at that seq', asyn
   const res = await api('GET', `/api/envelopes/${envelope.id}/verify`);
   assert.equal(res.data.valid, false);
   assert.equal(res.data.brokenAt, midRow.seq);
+});
+
+// ================= license gate: first document free, then $59 lifetime =================
+await step('license gate: unlicensed after one envelope, free allowance used', async () => {
+  const res = await api('GET', '/api/license');
+  assert.equal(res.status, 200);
+  assert.equal(res.data.licensed, false);
+  assert.equal(res.data.free_used, 1);
+  assert.equal(res.data.free_limit, 1);
+  assert.ok(res.data.checkout_url.includes('whop.com/checkout/'));
+});
+
+await step('license gate: second envelope creation blocked with 402 + checkout url', async () => {
+  const fd = new FormData();
+  fd.append('pdf', new Blob([await makeFixturePdf()], { type: 'application/pdf' }), 'blocked.pdf');
+  fd.append('title', 'Should Be Blocked');
+  const res = await api('POST', '/api/envelopes', fd);
+  assert.equal(res.status, 402);
+  assert.equal(res.data.upgrade, true);
+  assert.ok(res.data.checkout_url.includes('whop.com/checkout/'));
+});
+
+await step('license gate: malformed key rejected with 400', async () => {
+  const res = await api('POST', '/api/license/activate', { key: 'NOT-A-REAL-KEY' });
+  assert.equal(res.status, 400);
+});
+
+await step('license gate: well-formed Whop key accepted without WHOP_API_KEY (normalized from dashless lowercase)', async () => {
+  const res = await api('POST', '/api/license/activate', { key: 'watest100000001test01w' });
+  assert.equal(res.status, 200);
+  assert.equal(res.data.licensed, true);
+  assert.equal(res.data.source, 'unverified');
 });
 
 // ================= second envelope: decline path + void 410 =================

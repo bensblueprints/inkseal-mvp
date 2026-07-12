@@ -109,7 +109,24 @@ CREATE TABLE IF NOT EXISTS templates (
   roles_json TEXT NOT NULL DEFAULT '[]',
   created_at TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS license (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  key TEXT,
+  machine_id TEXT,
+  activated_at TEXT,
+  source TEXT,                                 -- 'whop' (API-verified) | 'unverified' (format-only)
+  free_envelopes_used INTEGER NOT NULL DEFAULT 0
+);
+INSERT OR IGNORE INTO license (id) VALUES (1);
 `);
+
+// Installs that predate the license table shouldn't get a fresh free document:
+// count envelopes that already exist toward the free allowance.
+db.prepare(`
+  UPDATE license SET free_envelopes_used = (SELECT COUNT(*) FROM envelopes)
+  WHERE id = 1 AND key IS NULL AND free_envelopes_used < (SELECT COUNT(*) FROM envelopes)
+`).run();
 
 export default db;
 

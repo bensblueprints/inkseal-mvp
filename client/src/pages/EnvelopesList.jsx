@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Plus, FileText, Trash2, Upload } from 'lucide-react';
+import { Plus, FileText, Trash2, Upload, Sparkles } from 'lucide-react';
 import { api } from '../api.js';
+import UpgradeModal from '../components/UpgradeModal.jsx';
 
 const STATUS_STYLE = {
   draft: 'bg-zinc-700/40 text-zinc-300',
@@ -17,11 +18,13 @@ export default function EnvelopesList() {
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [license, setLicense] = useState(null);
+  const [showUpgrade, setShowUpgrade] = useState(false);
   const fileRef = useRef(null);
   const nav = useNavigate();
 
   const load = () => api.listEnvelopes().then(setEnvelopes);
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); api.getLicense().then(setLicense).catch(() => {}); }, []);
 
   const upload = async (file) => {
     if (!file) return;
@@ -34,7 +37,8 @@ export default function EnvelopesList() {
       const env = await api.createEnvelope(fd);
       nav(`/admin/envelopes/${env.id}/edit`);
     } catch (err) {
-      setError(err.message);
+      if (err.status === 402) setShowUpgrade(true);
+      else setError(err.message);
     } finally {
       setBusy(false);
     }
@@ -64,6 +68,27 @@ export default function EnvelopesList() {
       </div>
 
       {error && <div className="mb-4 rounded-lg border border-red-900 bg-red-950/40 px-4 py-2 text-sm text-red-300">{error}</div>}
+
+      {license && !license.licensed && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-indigo-900/60 bg-indigo-950/30 px-4 py-2.5 text-sm text-indigo-200">
+          <Sparkles size={15} className="shrink-0 text-indigo-400" />
+          <span className="flex-1">
+            Free plan: {Math.min(license.free_used, license.free_limit)} of {license.free_limit} free document{license.free_limit === 1 ? '' : 's'} used.
+            First document is free — upgrade once for unlimited.
+          </span>
+          <button onClick={() => setShowUpgrade(true)} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium hover:bg-indigo-500">
+            $59 lifetime
+          </button>
+        </div>
+      )}
+
+      {showUpgrade && (
+        <UpgradeModal
+          checkoutUrl={license?.checkout_url}
+          onClose={() => setShowUpgrade(false)}
+          onActivated={() => { setShowUpgrade(false); api.getLicense().then(setLicense).catch(() => {}); }}
+        />
+      )}
 
       <div
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}

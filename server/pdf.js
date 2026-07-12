@@ -140,7 +140,9 @@ function appendCertificatePage(pdfDoc, { helv, helvBold, envelope, signers, audi
   line('Audit Trail (hash-chained)', { size: 13, font: helvBold, gap: 18 });
   line('Each event\'s hash = sha256(prev_hash + event_json). Verify via GET /api/envelopes/:id/verify.', { size: 8, gap: 16 });
   for (const ev of auditEvents) {
-    line(`#${ev.seq}  ${ev.at}  ${ev.type}  actor=${ev.actor || '-'} ip=${ev.ip || '-'}`, { size: 8, gap: 12 });
+    let email = '';
+    try { email = JSON.parse(ev.data_json || '{}').email || ''; } catch { /* ignore */ }
+    line(`#${ev.seq}  ${ev.at}  ${ev.type}  actor=${ev.actor || '-'}${email ? ` <${email}>` : ''} ip=${ev.ip || '-'}`, { size: 8, gap: 12 });
     line(`  hash: ${ev.hash}`, { size: 7, gap: 14, color: rgb(0.4, 0.4, 0.4) });
   }
 
