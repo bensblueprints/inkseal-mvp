@@ -112,3 +112,7 @@ npm test         # coordinate-mapping unit tests + full API smoke test
 ## License
 
 MIT — see [LICENSE](LICENSE). Signature font (`fonts/Signature.woff2`, Caveat) is SIL OFL 1.1 — see `fonts/Signature-OFL-LICENSE.txt`.
+
+## macOS build
+
+See [MAC-BUILD.md](MAC-BUILD.md). Quickest path: GitHub **Actions** tab -> run the **Mac Build** (`mac-build.yml`) workflow to get a downloadable `.dmg` (unsigned - right-click -> Open on first launch).
