@@ -1,5 +1,9 @@
 # ✍️ Inkseal
 
+## Demo
+
+VIDEO-PLACEHOLDER
+
 ![MIT License](https://img.shields.io/badge/license-MIT-green.svg)
 
 **Self-hosted e-signature platform. First document free. $59 once. Own it forever.**
