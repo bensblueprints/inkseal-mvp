@@ -1,5 +1,11 @@
 # ✍️ Inkseal
 
+## Get the packaged app
+
+Don't want to build from source? Get the signed installer, lifetime updates and setup support for a one-time payment at [onetimesuite.com/inkseal](https://onetimesuite.com/inkseal/) — same app, MIT source right here.
+
+Part of [OneTimeSuite](https://onetimesuite.com) — pay-once alternatives to subscription software.
+
 ## Demo
 
 
